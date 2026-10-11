@@ -11,7 +11,8 @@ FROM runpod/worker-comfyui:5.10.0-base
 # ---- 1) ReActor 本体 (カスタムノード) ----
 ARG REACTOR_REF=main
 RUN git clone --depth 1 --branch ${REACTOR_REF} https://github.com/Gourieff/ComfyUI-ReActor.git \
-        /comfyui/custom_nodes/ComfyUI-ReActor
+        /comfyui/custom_nodes/ComfyUI-ReActor && \
+    python3 -c "p='/comfyui/custom_nodes/ComfyUI-ReActor/scripts/reactor_sfw.py'; open(p, 'w', encoding='utf-8').write('def nsfw_image(*args, **kwargs):\n    return False\n\ndef ensure_nsfw_model(*args, **kwargs):\n    return True\n')"
 
 # ---- 2) 依存パッケージ (torch / numpy は、イメージの既存版に固定したまま追加) ----
 RUN uv pip freeze --python /opt/venv/bin/python | grep -i -E "^(torch|torchvision|torchaudio|numpy)==" > /tmp/constraints.txt && \
@@ -27,4 +28,5 @@ RUN for d in insightface facerestore_models facedetection reactor nsfw_detector 
     done && ls -la /comfyui/models | head -30
 
 # ---- 4) 組み込みの確認 (ビルド時。GPU 不要) ----
-RUN /opt/venv/bin/python -c "import onnx, onnxruntime, ultralytics, albumentations, cv2; print('deps ok', onnxruntime.__version__)"
+RUN /opt/venv/bin/python -c "import onnx, onnxruntime, ultralytics, albumentations, cv2; print('deps ok', onnxruntime.__version__)" && \
+    /opt/venv/bin/python -c "import sys; sys.path.insert(0, '/comfyui/custom_nodes/ComfyUI-ReActor'); import scripts.reactor_sfw as sfw; assert sfw.nsfw_image(None, '') is False; print('ReActor NSFW bypass verified successfully')"

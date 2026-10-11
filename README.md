@@ -43,10 +43,11 @@ python scripts/runpod_serverless_test.py --endpoint <新ID> --template krea2-zim
 - 初回はコールドスタート（約150秒＋イメージの取得）。
 - 正常なら `runpod_test/serverless_out/` に画像が保存される。
 
-### 4. 本番の切り替え（任意）
-- 既存のエンドポイント `ehtjs3jnjzn8qh` のテンプレート（`z4y5nsm56h`）のイメージを、新しいイメージへ差し替えれば、Grok アプリ側の設定（エンドポイントID）はそのまま使える。
-- 新しいイメージは `base` の上位互換のため、既存のワークフローは変わらず動く。
-- **戻し方**: テンプレートのイメージを `runpod/worker-comfyui:5.10.0-base` に戻す。
+### 4. 本番の切り替え（2026-10-11 実施完了）
+- 本番エンドポイント `ehtjs3jnjzn8qh` のテンプレート（`z4y5nsm56h`）のイメージを `ghcr.io/haseyu116-del/comfy-reactor-worker:5.10.0-reactor-nsfw` へ切り替え完了。
+- Grok アプリや外部ツール側のエンドポイントID設定（`ehtjs3jnjzn8qh`）やAPI変更は一切不要。
+- 新しいイメージは `base` の上位互換のため、既存のワークフロー（ReActorなし）もそのまま稼働。
+- **ロールバック手順**: テンプレート `z4y5nsm56h` のイメージを `runpod/worker-comfyui:5.10.0-base`、コンテナディスクを 5GB に戻す。
 
 ## テンプレート（`templates/`）
 | ファイル | 顔の指定方法 | 内容 |

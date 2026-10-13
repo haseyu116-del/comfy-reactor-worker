@@ -33,6 +33,6 @@ jobs:
           context: .
           platforms: linux/amd64
           push: true
+          # 新しいタグだけを公開する(既存の -nsfw / -tex は上書きしない: 本番とテストのロールバック先として残す)
           tags: |
-            ghcr.io/${{ github.repository_owner }}/comfy-reactor-worker:5.10.0-reactor-nsfw
-            ghcr.io/${{ github.repository_owner }}/comfy-reactor-worker:5.10.0-reactor-tex
+            ghcr.io/${{ github.repository_owner }}/comfy-reactor-worker:5.10.0-reactor-tex-memguard

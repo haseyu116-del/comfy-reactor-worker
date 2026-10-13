@@ -30,7 +30,23 @@ RUN for d in insightface facerestore_models facedetection reactor nsfw_detector 
         rm -rf /comfyui/models/$d && ln -s /runpod-volume/models/$d /comfyui/models/$d; \
     done && ls -la /comfyui/models | head -30
 
+# ---- 3.1) メモリ対策: ComfyUI にコンテナの本当のメモリ上限を見せる + ComfyUI が落ちたらワーカーを入れ替える ----
+# - memguard/sitecustomize.py: ComfyUI(main.py)だけで psutil.virtual_memory() を cgroup の上限に合わせる。
+#   (ホストの RAM は 250GB 級に見えるが、コンテナは遥かに小さい上限で OOM kill される。
+#    そのため、ComfyUI は古いモデルを RAM から追い出さず、ワークフローの切り替えで落ちていた)
+# - memguard/watchdog.sh: /start.sh を包み、ComfyUI のプロセスが消えたらコンテナを終了させる(RunPod がワーカーを入れ替える)
+COPY memguard /opt/memguard
+RUN sed -i 's/\r$//' /opt/memguard/watchdog.sh && chmod +x /opt/memguard/watchdog.sh
+ENV PYTHONPATH="/opt/memguard${PYTHONPATH:+:${PYTHONPATH}}"
+CMD ["/opt/memguard/watchdog.sh"]
+
 # ---- 4) 組み込みの確認 (ビルド時。GPU 不要) ----
 RUN /opt/venv/bin/python -c "import onnx, onnxruntime, ultralytics, albumentations, cv2; print('deps ok', onnxruntime.__version__)" && \
     /opt/venv/bin/python -c "import sys; sys.path.insert(0, '/comfyui/custom_nodes/ComfyUI-ReActor'); import scripts.reactor_sfw as sfw; assert sfw.nsfw_image(None, '') is False; print('ReActor NSFW bypass verified successfully')" && \
-    /opt/venv/bin/python -c "import sys; sys.path.insert(0, '/comfyui/custom_nodes/ComfyUI-TextureTransfer'); from texture_transfer import FaceTextureTransfer; print('FaceTextureTransfer verified successfully')"
+    /opt/venv/bin/python -c "import sys; sys.path.insert(0, '/comfyui/custom_nodes/ComfyUI-TextureTransfer'); from texture_transfer import FaceTextureTransfer; print('FaceTextureTransfer verified successfully')" && \
+    MEMGUARD_FORCE=1 /opt/venv/bin/python -c "import psutil; vm = psutil.virtual_memory(); print('memguard verified successfully, total GB:', round(vm.total / 1024**3, 1))" && \
+    bash -n /opt/memguard/watchdog.sh && echo "watchdog.sh syntax ok"
+
+# ウォッチドッグの動作テスト(ComfyUI が消えたら終了する/自力で終わったときは終了コードをそのまま返す)。失敗するとビルドが止まる
+COPY tests/watchdog_selftest.sh /tmp/watchdog_selftest.sh
+RUN sed -i 's/\r$//' /tmp/watchdog_selftest.sh && bash /tmp/watchdog_selftest.sh && rm /tmp/watchdog_selftest.sh

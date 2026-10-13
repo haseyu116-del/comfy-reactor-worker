@@ -49,6 +49,26 @@ python scripts/runpod_serverless_test.py --endpoint <新ID> --template krea2-zim
 - 新しいイメージは `base` の上位互換のため、既存のワークフロー（ReActorなし）もそのまま稼働。
 - **ロールバック手順**: テンプレート `z4y5nsm56h` のイメージを `runpod/worker-comfyui:5.10.0-base`、コンテナディスクを 5GB に戻す。
 
+## メモリ対策（`memguard/`、タグ `5.10.0-reactor-tex-memguard`）
+症状: 一度生成したあと別のワークフローへ切り替えると、ワーカーの ComfyUI が OOM で落ち、以後そのワーカーは
+`ComfyUI HTTP unreachable` を返し続ける(手動でワーカーを削除するまで直らない)。
+
+原因: コンテナからはホストの RAM(250GB 級)が見えるが、実際の上限(cgroup)はそれより遥かに小さい。ComfyUI は
+`psutil.virtual_memory()` で RAM の空きを判断するため、古いモデルを一切 RAM から追い出さず、切り替えで上限を超えていた。
+
+| ファイル | 役割 |
+|---|---|
+| `memguard/sitecustomize.py` | ComfyUI(`main.py`)のプロセスだけで `psutil.virtual_memory()` を cgroup の上限に合わせる(`PYTHONPATH` で起動時に読み込まれる)。同じワークフローの連続生成では、RAM に余裕があるのでモデルは残り、遅くならない。上限に近づいたときだけ古いモデルが追い出される |
+| `memguard/watchdog.sh` | `/start.sh` を包む。ComfyUI のプロセスが消えたらコンテナを終了させ、RunPod にワーカーを入れ替えさせる |
+| `tests/test_memguard.py` | 上記の計算のテスト(`python -m unittest discover -s tests`) |
+| `tests/watchdog_selftest.sh` | ビルド時に走るウォッチドッグの動作テスト(失敗するとビルドが止まる) |
+
+- 起動ログに `[memguard] container memory: ComfyUI sees total ... GB` が出る。**実際の上限値の確認に使う**。
+- 環境変数(テンプレートで設定可): `MEMGUARD_RESERVE_GB`(既定 3。ComfyUI が空けておくメモリ)、`MEMGUARD_DISABLE=1`(無効化)、
+  `WATCHDOG_INTERVAL_S`(既定 3)。
+- ワーカーが落ちて入れ替わるのは、落ちたときだけ(コールドスタートが毎回発生することはない)。
+- ビルドは新しいタグだけを公開する。既存の `-nsfw` / `-tex` は上書きしない(ロールバック先)。
+
 ## テンプレート（`templates/`）
 | ファイル | 顔の指定方法 | 内容 |
 |---|---|---|
